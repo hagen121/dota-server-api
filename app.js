@@ -1,17 +1,18 @@
 const express = require('express');
 const bodyParser = require('body-parser');
+require('dotenv').config();
 
 const app = express();
 app.use(bodyParser.json());
 
-// Роуты
+// Подключаем роуты
 app.use('/', require('./routes/game'));
 app.use('/', require('./routes/player'));
-app.use('/', require('./routes/battlepass'));
 app.use('/', require('./routes/chat'));
 app.use('/', require('./routes/quests'));
+app.use('/', require('./routes/battlepass'));
 
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`Dota 2 API server running on port ${PORT}`);
+  console.log(`Server listening on port ${PORT}`);
 });

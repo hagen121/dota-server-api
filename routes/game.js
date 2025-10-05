@@ -1,36 +1,73 @@
 const express = require('express');
 const router = express.Router();
+const supabase = require('../supabase');
 
 // Топ-1 рекорды
-router.post('/get_top1_records', (req, res) => {
-  res.json({}); // вернуть список рекордов
+router.post('/get_top1_records', async (req, res) => {
+  // Это пример — ты сам определишь логику, что такое “топ-1”
+  // Например, выбрать игрока с самым высоким рейтингом
+  const { data, error } = await supabase
+    .from('players')
+    .select('*')
+    .order('rating', { ascending: false })
+    .limit(1);
+
+  if (error) {
+    return res.status(500).json({ error: error.message });
+  }
+
+  const top = data[0] || null;
+  res.json({
+    mode1: {
+      rating: top ? { steamid: top.steamid, value: top.rating } : null
+    }
+  });
 });
 
-// Все сезоны
-router.post('/get_all_seasons', (req, res) => {
-  res.json([]);
-});
+// Завершить матч и сохранить данные
+router.post('/finish_game_for_player_v45', async (req, res) => {
+  const { mode_id, difficult, key_tier, duration, player_info } = req.body;
 
-// Сезоны ключей
-router.post('/get_all_keys_seasons', (req, res) => {
-  res.json([]);
-});
+  if (!player_info || !Array.isArray(player_info)) {
+    return res.status(400).json({ error: "player_info array required" });
+  }
 
-// Сезоны battle pass
-router.post('/get_all_battle_pass_seasons', (req, res) => {
-  res.json([]);
-});
+  // Сначала вставим запись матча
+  const { data: matchData, error: matchErr } = await supabase
+    .from('matches')
+    .insert([{ mode_id, difficult, key_tier, duration }])
+    .select()
+    .single();
 
-// Сохранить матч (авто-сейв)
-router.post('/safe_match', (req, res) => {
-  console.log("safe_match", req.body);
-  res.json({ status: "ok" });
-});
+  if (matchErr) {
+    return res.status(500).json({ error: matchErr.message });
+  }
 
-// Завершить игру
-router.post('/finish_game_for_player_v45', (req, res) => {
-  console.log("finish_game_for_player_v45", req.body);
-  res.json({ status: "saved" });
+  const matchId = matchData.id;
+
+  // Затем для каждого игрока вставим player_matches и upsert игрока
+  for (const pl of player_info) {
+    await supabase
+      .from('players')
+      .upsert({
+        steamid: pl.SteamID,
+        nickname: pl.nickname || null
+      });
+
+    await supabase
+      .from('player_matches')
+      .insert({
+        match_id: matchId,
+        steamid: pl.SteamID,
+        hero_name: pl.heroname,
+        win: pl.win,
+        kills: pl.kills_creeps,
+        deaths: pl.deaths,
+        damage: pl.outgoing_damage
+      });
+  }
+
+  res.json({ status: "saved", match_id: matchId });
 });
 
 module.exports = router;
